@@ -15,7 +15,7 @@ So no delta backups, just grab all the files, push them to the a remote server a
 
 The MIT License (MIT)
 
-Copyright (c) 2016 David Bohn
+Copyright (c) 2018 David Bohn
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
