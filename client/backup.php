@@ -37,12 +37,18 @@ $includedFolders = [
     '../settings.php'
 ];
 
+// Should the database backup be included?
+$includeDatabase = true;
+
 // Should the backup files be uploaded?
 // Otherwise they will be stored in the same folder as the backup script
 $enableUpload = true;
 
 // Path on the FTP server, where the backups will be saved
 $ftpBase = "backups/";
+
+// Chunk size - After how many entries should there be an info? -1 for never!
+$chunkSize = 100;
 
 $backupName = "backup_{$application}_" . date("Y-m-d-His");
 
@@ -86,6 +92,8 @@ function createTempCredentialsFile($credentials) {
  * @return void
  */
 function addToZip(ZipArchive $zip, $path) {
+    global $chunkSize;
+
     $rootPath = realpath($path);
     if (is_file($rootPath)) {
         $zip->addFile($rootPath, basename($path));
@@ -94,7 +102,11 @@ function addToZip(ZipArchive $zip, $path) {
 
     $directory = basename($path);
 
+    echo "Adding $directory" . PHP_EOL;
+
     $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($rootPath), RecursiveIteratorIterator::LEAVES_ONLY);
+
+    $chunkPosition = 0;
 
     foreach ($files as $name => $file) {
         if (!$file->isDir()) {
@@ -103,24 +115,33 @@ function addToZip(ZipArchive $zip, $path) {
             $relativePath = substr($filePath, strlen($rootPath) + 1);
 
             $zip->addFile($filePath, $directory . '/' . $relativePath);
+
+            if ($chunkSize >= 0) {
+                if ($chunkPosition === 0) {
+                    echo "I'm packing..." . PHP_EOL;
+                }
+
+                $chunkPosition = ($chunkPosition + 1) % $chunkSize;
+            }
         }
     }
 }
 
 // Create database backup
+if ($includeDatabase) {
+    $tmpFileHandle = createTempCredentialsFile($credentials);
+    $credentialFile = stream_get_meta_data($tmpFileHandle)['uri'];
 
-$tmpFileHandle = createTempCredentialsFile($credentials);
-$credentialFile = stream_get_meta_data($tmpFileHandle)['uri'];
+    $output = [];
+    $returnValue = 1;
+    exec("mysqldump --defaults-extra-file=\"{$credentialFile}\" --result-file=\"{$backupName}.sql\" {$credentials->database}", $output, $returnValue);
 
-$output = [];
-$returnValue = 1;
-exec("mysqldump --defaults-extra-file=\"{$credentialFile}\" --result-file=\"{$backupName}.sql\" {$credentials->database}", $output, $returnValue);
-
-if ($returnValue === 0) {
-    echo "Database Backup: SUCCESS" . PHP_EOL;
-} else {
-    echo "Database Backup: FAIL" . PHP_EOL;
-    exit(1);
+    if ($returnValue === 0) {
+        echo "Database Backup: SUCCESS" . PHP_EOL;
+    } else {
+        echo "Database Backup: FAIL" . PHP_EOL;
+        exit(1);
+    }
 }
 
 // Create Zip Archive of selected files
@@ -132,12 +153,18 @@ foreach ($includedFolders as $folder) {
     addToZip($zip, $folder);
 }
 
-$zip->addFile("$backupName.sql");
+if ($includeDatabase) {
+    $zip->addFile("$backupName.sql");
+}
+
+echo "Finishing zipping..." . PHP_EOL;
 $zip->close();
 
 echo "Creating backup archive: SUCCESS" . PHP_EOL;
 
-unlink("$backupName.sql");
+if ($includeDatabase) {
+    unlink("$backupName.sql");
+}
 
 // Upload the backup if selected
 
