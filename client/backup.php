@@ -109,7 +109,7 @@ function addToZip(ZipArchive $zip, $path) {
     $chunkPosition = 0;
 
     foreach ($files as $name => $file) {
-        if (!$file->isDir()) {
+        if (!$file->isDir() && $file->isReadable()) {
             $filePath = $file->getRealPath();
 
             $relativePath = substr($filePath, strlen($rootPath) + 1);
